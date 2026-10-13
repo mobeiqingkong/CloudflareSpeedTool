@@ -69,6 +69,7 @@ type App struct {
 	runMu       sync.Mutex
 	running     bool
 	runningKind string
+	aborting    bool // 已请求中断（等待当前批次停止）
 }
 
 // NewApp 创建应用
@@ -156,6 +157,24 @@ func (a *App) StartTest(req TestRequest) StartResult {
 
 	a.emitStatus()
 	go a.runTest(req)
+	return StartResult{OK: true}
+}
+
+// StopTest 请求中断当前正在进行的测试（异步生效：延迟测速约 1 秒内停止，下载测速立即停止）
+func (a *App) StopTest() StartResult {
+	a.runMu.Lock()
+	if !a.running {
+		a.runMu.Unlock()
+		return StartResult{Error: "当前没有正在进行的测试"}
+	}
+	already := a.aborting
+	a.aborting = true
+	a.runMu.Unlock()
+
+	if !already {
+		a.emitLog("⏹ 已请求中断，正在停止测速…")
+	}
+	task.RequestAbort()
 	return StartResult{OK: true}
 }
 

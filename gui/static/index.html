@@ -118,6 +118,8 @@
     box-shadow: 0 4px 14px rgba(246,130,31,.35);
   }
   .btn.primary:hover:not(:disabled) { background: linear-gradient(135deg, #f78a24, #ee7610); border-color: transparent; }
+  .btn.danger { border-color: rgba(229,72,77,.5); color: var(--red); background: rgba(229,72,77,.06); }
+  .btn.danger:hover:not(:disabled) { border-color: rgba(229,72,77,.72); background: rgba(229,72,77,.13); }
 
   /* ---------- 控制台 ---------- */
   .console { padding: 0; overflow: hidden; }
@@ -170,6 +172,7 @@
   .hosts-note { margin-top: 8px; font-size: 13px; font-weight: 600; }
   .hosts-note.ok { color: var(--green); }
   .hosts-note.err { color: var(--red); }
+  .abort-note { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--amber); }
 
   .tbl-wrap { max-height: 372px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
   table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -230,6 +233,7 @@
   <section class="actions">
     <button id="btnProxy" class="btn" title="清除系统代理（注册表 ProxyEnable / ProxyServer / PAC + WinHTTP），避免代理影响测速准确性">清除系统代理</button>
     <div class="grow"></div>
+    <button id="btnStop" class="btn danger" title="中断正在进行的测试（延迟测速约 1 秒内停止、下载测速立即停止），已测得的部分结果仍会展示，但不会写入 hosts" hidden>中断</button>
     <button id="btnRun" class="btn primary" title="一键完整测速：延迟测速预筛 → 下载测速 → 综合评分选出最优 IP（约 2~3 分钟）；勾选后自动写入 hosts">开始运行</button>
   </section>
 
@@ -311,6 +315,17 @@
   function setRunButtonDisabled(disabled) {
     $("btnRun").disabled = disabled;
   }
+  function setStopButton(running) {
+    var btn = $("btnStop");
+    if (running) {
+      btn.hidden = false;
+    } else {
+      // 测试结束：隐藏中断按钮并复位（供下一次测试使用）
+      btn.hidden = true;
+      btn.disabled = false;
+      btn.textContent = "中断";
+    }
+  }
   function setProgress(text) {
     var t = (text || "").trim();
     $("barText").textContent = t;
@@ -359,6 +374,7 @@
     }
 
     setRunButtonDisabled(state.running || !state.hasIP);
+    setStopButton(state.running);
     if (st.running) {
       setStatusText(kindLabel(st.kind) + "进行中…", "run");
     } else {
@@ -384,7 +400,8 @@
     $("resultCard").hidden = false;
     $("thScore").hidden = !isFull;
     $("resultMeta").textContent =
-      kindLabel(d.testType) + " · 可用 IP " + d.total + " 个 · 用时 " + (d.elapsedMs / 1000).toFixed(1) + " 秒";
+      kindLabel(d.testType) + " · 可用 IP " + d.total + " 个 · 用时 " + (d.elapsedMs / 1000).toFixed(1) + " 秒" +
+      (d.aborted ? " · 已中断" : "");
 
     var b = d.best || {};
     var html = "";
@@ -393,6 +410,9 @@
     if (b.speed > 0) stats.push("速度 " + fmt(b.speed, 2) + " MB/s");
     if (b.colo) stats.push("地区 " + esc(b.colo));
     html += '<div class="best-stats">' + stats.join(" · ") + "</div>";
+    if (d.aborted) {
+      html += '<div class="abort-note">⏹ 测试已中断，以下为部分结果（未写入 hosts，可重新运行完整测速）</div>';
+    }
     if (d.hosts) {
       if (d.hosts.written) {
         html += '<div class="hosts-note ok">✔ 已写入 hosts：' + esc(b.ip) + " " + esc(d.hosts.domain) + "</div>";
@@ -454,6 +474,25 @@
     }
   }
 
+  async function doStop() {
+    var btn = $("btnStop");
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+      var res = await postJSON("/api/stop", {});
+      if (res && !res.ok) {
+        toast((res && res.error) || "中断失败", true);
+        btn.disabled = false;
+      } else {
+        btn.textContent = "停止中…";
+        toast("已请求中断，正在停止…");
+      }
+    } catch (e) {
+      toast("中断失败：" + e, true);
+      btn.disabled = false;
+    }
+  }
+
   async function doClearProxy() {
     var btn = $("btnProxy");
     btn.disabled = true;
@@ -470,6 +509,7 @@
 
   function bindEvents() {
     $("btnProxy").addEventListener("click", doClearProxy);
+    $("btnStop").addEventListener("click", doStop);
     $("btnRun").addEventListener("click", function () { doTest("full"); });
     $("domain").addEventListener("keydown", function (e) {
       if (e.key === "Enter") doTest("full");

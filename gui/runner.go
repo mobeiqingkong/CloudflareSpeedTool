@@ -29,8 +29,9 @@ type TestResult struct {
 	Rows      []ResultRow `json:"rows"`
 	Best      *ResultRow  `json:"best"`
 	Hosts     *HostsInfo  `json:"hosts,omitempty"`
-	Total     int         `json:"total"`     // 延迟测速得到可用 IP 数
-	ElapsedMS int64       `json:"elapsedMs"` // 总用时（毫秒）
+	Total     int         `json:"total"`             // 延迟测速得到可用 IP 数
+	ElapsedMS int64       `json:"elapsedMs"`         // 总用时（毫秒）
+	Aborted   bool        `json:"aborted,omitempty"` // 是否为中断后的部分结果
 }
 
 func testLabel(kind string) string {
@@ -54,11 +55,13 @@ func (a *App) runTest(req TestRequest) {
 		a.runMu.Lock()
 		a.running = false
 		a.runningKind = ""
+		a.aborting = false
 		a.runMu.Unlock()
 		a.emitStatus()
 	}()
 
 	startAt := time.Now()
+	task.ClearAbort() // 清除上一轮可能残留的中断标志
 	extra := ""
 	if req.WriteHosts && req.Domain != "" {
 		extra = fmt.Sprintf("，完成后写入 hosts：%s", req.Domain)
@@ -74,6 +77,11 @@ func (a *App) runTest(req TestRequest) {
 	// ---------- 阶段 1：延迟测速 ----------
 	a.emitStage("latency", "start", 0)
 	pingSet := task.NewPing().Run().FilterDelay().FilterLossRate()
+
+	if task.IsAborted() { // 延迟阶段被中断：展示已测得的部分结果
+		a.finishAborted(req, pingRows(pingSet, maxRows), len(pingSet), startAt)
+		return
+	}
 	a.emitStage("latency", "done", len(pingSet))
 
 	if len(pingSet) == 0 {
@@ -92,6 +100,15 @@ func (a *App) runTest(req TestRequest) {
 		// ---------- 阶段 2：下载测速 ----------
 		a.emitStage("download", "start", 0)
 		speedSet := task.TestDownloadSpeed(pingSet)
+
+		if task.IsAborted() { // 下载阶段被中断：展示已测得的部分结果
+			rows := speedRows(speedSet, maxRows)
+			if req.Type == "full" {
+				rows = applyScoreAndSort(rows)
+			}
+			a.finishAborted(req, rows, len(pingSet), startAt)
+			return
+		}
 		a.emitStage("download", "done", len(speedSet))
 		if len(speedSet) == 0 {
 			a.emitError("下载测速没有结果，请稍后重试")
@@ -126,17 +143,42 @@ func (a *App) finishTest(req TestRequest, rows []ResultRow, total int, startAt t
 	a.emitLog(fmt.Sprintf("★ 最优 IP：%s（延迟 %.1f ms，丢包 %.0f%%%s%s）",
 		best.IP, best.Delay, best.Loss*100, speedText(best.Speed), coloText(best.Colo)))
 
-	// 写入 hosts
+	// 写入 hosts（若恰好在完成瞬间收到中断请求，则跳过写入，保证「中断即不写」）
 	if req.WriteHosts && req.Domain != "" {
-		info := WriteHosts(best.IP, req.Domain, a.runDir)
-		res.Hosts = info
-		for _, l := range info.Logs {
-			a.emitLog(l)
+		if task.IsAborted() {
+			a.emitLog("已收到中断请求，跳过写入 hosts")
+		} else {
+			info := WriteHosts(best.IP, req.Domain, a.runDir)
+			res.Hosts = info
+			for _, l := range info.Logs {
+				a.emitLog(l)
+			}
 		}
 	}
 
 	a.emit("result", res)
 	a.emitLog(fmt.Sprintf("✔ %s完成，用时 %.1f 秒", testLabel(req.Type), time.Since(startAt).Seconds()))
+}
+
+// finishAborted 中断后的收尾：展示已测得的部分结果（若有），但不写入 hosts、不导出结果文件
+func (a *App) finishAborted(req TestRequest, rows []ResultRow, total int, startAt time.Time) {
+	a.emitLog(fmt.Sprintf("⏹ 已中断%s（用时 %.1f 秒）", testLabel(req.Type), time.Since(startAt).Seconds()))
+	if req.WriteHosts && req.Domain != "" {
+		a.emitLog("已勾选写入 hosts，但因测试中断未执行写入（避免写入不完整的结果）")
+	}
+	if len(rows) == 0 {
+		return
+	}
+	best := rows[0]
+	a.emit("result", TestResult{
+		TestType:  req.Type,
+		Rows:      rows,
+		Best:      &best,
+		Total:     total,
+		ElapsedMS: time.Since(startAt).Milliseconds(),
+		Aborted:   true,
+	})
+	a.emitLog(fmt.Sprintf("以上为中断时的部分结果（已测出可用 IP %d 个），仅供参考", total))
 }
 
 // ---------- 数据转换 ----------

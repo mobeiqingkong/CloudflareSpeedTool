@@ -16,6 +16,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/api/status", a.handleStatus)
 	mux.HandleFunc("/api/events", a.handleEvents)
 	mux.HandleFunc("/api/test", a.handleTest)
+	mux.HandleFunc("/api/stop", a.handleStop)
 	mux.HandleFunc("/api/clear-proxy", a.handleClearProxy)
 	return mux
 }
@@ -58,6 +59,15 @@ func (a *App) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, a.StartTest(req))
+}
+
+// handleStop 中断正在进行的测试
+func (a *App) handleStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, a.StopTest())
 }
 
 // handleClearProxy 清除系统代理

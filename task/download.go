@@ -74,6 +74,10 @@ func TestDownloadSpeed(ipSet utils.PingDelaySet) (speedSet utils.DownloadSpeedSe
 	}
 	bar := utils.NewBar(TestCount, bar_b, "")
 	for i := 0; i < testNum; i++ {
+		if IsAborted() { // 已请求中断：停止下载测速
+			utils.Yellow.Println("[信息] 已请求中断，停止下载测速。")
+			break
+		}
 		speed, colo := downloadHandler(ipSet[i].IP)
 		ipSet[i].DownloadSpeed = speed
 		if ipSet[i].Colo == "" { // 只有当 Colo 是空的时候，才写入，否则代表之前是 httping 测速并获取过了
@@ -202,6 +206,9 @@ func downloadHandler(ip *net.IPAddr) (float64, string) {
 
 	// 循环计算，如果文件下载完了（两者相等），则退出循环（终止测速）
 	for contentLength != contentRead {
+		if IsAborted() { // 已请求中断：立即终止当前 IP 的下载（不记录测速结果）
+			return 0.0, ""
+		}
 		currentTime := time.Now()
 		if currentTime.After(nextTime) {
 			timeCounter++
