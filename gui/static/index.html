@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloudflare 优选 IP 工具</title>
+<style>
+  :root {
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --text: #1a2233;
+    --muted: #667085;
+    --border: #e4e8f0;
+    --accent: #f6821f;
+    --accent-hover: #e06f0d;
+    --blue: #2f6bff;
+    --green: #12a150;
+    --red: #e5484d;
+    --amber: #c77700;
+    --code-bg: #fbfcfe;
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 20px rgba(16, 24, 40, .06);
+    --mono: Consolas, "Cascadia Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101318;
+      --card: #191e26;
+      --text: #e9edf5;
+      --muted: #8b95a9;
+      --border: #2a3140;
+      --code-bg: #131820;
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 6px 20px rgba(0,0,0,.35);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    overflow-y: auto;
+    user-select: none;
+  }
+  input, button { font: inherit; }
+  .mono { font-family: var(--mono); }
+
+  .wrap { max-width: 960px; margin: 0 auto; padding: 22px 22px 34px; }
+
+  /* ---------- Header ---------- */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px; margin-bottom: 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .logo {
+    width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; font-size: 21px;
+    background: linear-gradient(135deg, #ffb347, #f6821f 55%, #e05c00);
+    box-shadow: 0 4px 12px rgba(246, 130, 31, .38);
+  }
+  h1 { font-size: 17px; font-weight: 650; letter-spacing: .1px; }
+  .titles p { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+  .badge {
+    flex: 0 0 auto; font-size: 12px; padding: 5px 11px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--card); color: var(--muted);
+    white-space: nowrap;
+  }
+  .badge.ok { color: var(--green); border-color: rgba(18,161,80,.35); background: rgba(18,161,80,.08); }
+  .badge.warn { color: var(--amber); border-color: rgba(199,119,0,.4); background: rgba(199,119,0,.09); }
+
+  /* ---------- Cards ---------- */
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 16px 18px; margin-bottom: 14px;
+  }
+
+  /* ---------- 配置区 ---------- */
+  .field-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .lbl { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
+  #domain {
+    flex: 1 1 260px; min-width: 200px;
+    padding: 10px 13px; border-radius: 9px;
+    border: 1px solid var(--border); background: var(--code-bg); color: var(--text);
+    font-family: var(--mono); font-size: 14px; outline: none;
+    transition: border-color .15s, box-shadow .15s;
+    user-select: text;
+  }
+  #domain:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(246,130,31,.16); }
+  #domain::placeholder { color: var(--muted); opacity: .75; }
+  .check {
+    display: flex; align-items: center; gap: 8px; margin-top: 13px;
+    font-size: 13px; color: var(--muted); cursor: pointer; user-select: none;
+  }
+  .check input {
+    width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; flex: 0 0 auto;
+  }
+
+  /* ---------- 按钮区 ---------- */
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+  .actions .grow { flex: 1 1 auto; }
+  .btn {
+    padding: 10px 18px; border-radius: 9px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+    font-weight: 600; font-size: 13.5px;
+    transition: transform .06s, background .15s, border-color .15s, box-shadow .15s;
+    white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { border-color: #c9d2e3; background: #f9fafc; }
+  @media (prefers-color-scheme: dark) {
+    .btn:hover:not(:disabled) { border-color: #3a4356; background: #202632; }
+  }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary {
+    background: linear-gradient(135deg, #f99530, #f6821f 60%, #ea6d08);
+    border-color: transparent; color: #fff;
+    box-shadow: 0 4px 14px rgba(246,130,31,.35);
+  }
+  .btn.primary:hover:not(:disabled) { background: linear-gradient(135deg, #f78a24, #ee7610); border-color: transparent; }
+  .btn.test { border-color: rgba(47,107,255,.4); color: var(--blue); background: rgba(47,107,255,.05); }
+  .btn.test:hover:not(:disabled) { background: rgba(47,107,255,.1); border-color: rgba(47,107,255,.55); }
+
+  /* ---------- 控制台 ---------- */
+  .console { padding: 0; overflow: hidden; }
+  .chead {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 16px; border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #b6bdcc; flex: 0 0 auto; }
+  .dot.run { background: var(--blue); animation: pulse 1.1s ease-in-out infinite; }
+  .dot.done { background: var(--green); }
+  .dot.err { background: var(--red); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  #statusText { font-weight: 600; white-space: nowrap; }
+  .bar {
+    flex: 1 1 auto; height: 7px; border-radius: 999px; background: rgba(47,107,255,.13);
+    overflow: hidden; min-width: 60px;
+  }
+  #barFill { height: 100%; width: 0%; border-radius: 999px;
+    background: linear-gradient(90deg, #6f9bff, var(--blue)); transition: width .18s linear; }
+  #barText { font-size: 12px; color: var(--muted); white-space: nowrap; max-width: 320px;
+    overflow: hidden; text-overflow: ellipsis; }
+  .logs {
+    height: 232px; overflow-y: auto; padding: 10px 16px 12px;
+    font-size: 12.5px; line-height: 1.75; background: var(--code-bg);
+    user-select: text;
+  }
+  .logs:empty::after { content: "等待操作…"; color: var(--muted); }
+  .log-line { white-space: pre-wrap; word-break: break-all; }
+  .log-line .ts { color: var(--muted); }
+  .log-line .hl { color: var(--accent); font-weight: 600; }
+  .log-line .ok { color: var(--green); }
+  .log-line .err { color: var(--red); }
+
+  /* ---------- 结果区 ---------- */
+  .result-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .result-head h2 { font-size: 15px; font-weight: 650; }
+  .result-head .meta { font-size: 12.5px; color: var(--muted); }
+  .best {
+    border: 1px solid rgba(18,161,80,.35); background: rgba(18,161,80,.06);
+    border-radius: 10px; padding: 13px 16px; margin-bottom: 13px;
+  }
+  .best-ip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .best-ip .label {
+    font-size: 12px; font-weight: 700; color: #fff; background: var(--green);
+    padding: 2px 9px; border-radius: 999px;
+  }
+  .best-ip b { font-size: 18px; letter-spacing: .3px; user-select: text; }
+  .best-stats { color: var(--muted); font-size: 13px; margin-top: 5px; }
+  .hosts-note { margin-top: 8px; font-size: 13px; font-weight: 600; }
+  .hosts-note.ok { color: var(--green); }
+  .hosts-note.err { color: var(--red); }
+
+  .tbl-wrap { max-height: 372px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tbl thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--card); border-bottom: 1px solid var(--border);
+    text-align: left; padding: 9px 12px; font-weight: 650; font-size: 12.5px; color: var(--muted);
+    white-space: nowrap;
+  }
+  .tbl td { padding: 7px 12px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; user-select: text; }
+  .tbl tbody tr:last-child td { border-bottom: none; }
+  .tbl tbody tr:hover td { background: rgba(47,107,255,.04); }
+  .tbl tr.top td { background: rgba(18,161,80,.07); font-weight: 600; }
+  .tbl tr.top td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+
+  /* ---------- Toast ---------- */
+  .toast {
+    position: fixed; top: 18px; left: 50%; transform: translate(-50%, -90px);
+    background: #232a38; color: #fff; padding: 10px 18px; border-radius: 10px;
+    font-size: 13px; box-shadow: 0 10px 30px rgba(0,0,0,.28);
+    transition: transform .25s ease; max-width: 76%; text-align: center;
+    pointer-events: none; z-index: 99; opacity: .97;
+  }
+  .toast.show { transform: translate(-50%, 0); }
+  .toast.err { background: #c62a2f; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgba(120,132,155,.35); border-radius: 6px;
+    border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(120,132,155,.55); background-clip: padding-box; border: 2px solid transparent; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="logo">⚡</div>
+      <div class="titles">
+        <h1>Cloudflare 优选 IP 工具</h1>
+        <p>测试 Cloudflare CDN 各 IP 的延迟与速度，把最优 IP 写入 hosts 加速网站访问<span id="ver"></span></p>
+      </div>
+    </div>
+    <div id="adminBadge" class="badge">检测权限中…</div>
+  </header>
+
+  <section class="card">
+    <div class="field-row">
+      <label class="lbl" for="domain">要加速的域名</label>
+      <input id="domain" type="text" placeholder="例如：github.com（可粘贴完整网址，自动提取域名）"
+             spellcheck="false" autocomplete="off" autofocus>
+    </div>
+    <label class="check">
+      <input type="checkbox" id="writeHosts" checked>
+      <span>测试完成后直接写入 hosts（写入前自动备份原文件，并注释旧记录）</span>
+    </label>
+  </section>
+
+  <section class="actions">
+    <button id="btnProxy" class="btn" title="清除系统代理（注册表 ProxyEnable / ProxyServer / PAC + WinHTTP），避免代理影响测速准确性">清除系统代理</button>
+    <div class="grow"></div>
+    <button id="btnLatency" class="btn test" title="仅测 TCP 延迟，选出延迟最低的 IP，速度最快（约 10~40 秒）">延迟测试</button>
+    <button id="btnSpeed" class="btn test" title="延迟测速 + 下载测速，选出下载速度最快的 IP（约 1~3 分钟）">速度测试</button>
+    <button id="btnFull" class="btn primary" title="完整两阶段测速后按「低延迟 + 高速度」综合评分选出最均衡的 IP（约 1~3 分钟）">综合测试</button>
+  </section>
+
+  <section class="card console">
+    <div class="chead">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">正在初始化…</span>
+      <div class="bar"><div id="barFill"></div></div>
+      <span id="barText" class="mono"></span>
+    </div>
+    <div id="logs" class="logs mono"></div>
+  </section>
+
+  <section class="card result" id="resultCard" hidden>
+    <div class="result-head">
+      <h2>测速结果</h2>
+      <span class="meta" id="resultMeta"></span>
+    </div>
+    <div class="best" id="bestBox"></div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th style="width:38px">#</th>
+            <th>IP 地址</th>
+            <th>延迟 (ms)</th>
+            <th>丢包率</th>
+            <th>速度 (MB/s)</th>
+            <th>地区</th>
+            <th id="thScore" hidden>综合得分</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { running: false, hasIP: true };
+
+  // ---------- 工具函数 ----------
+  function now() {
+    var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; };
+    return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function fmt(v, n) {
+    var x = Number(v);
+    return isFinite(x) ? x.toFixed(n) : "—";
+  }
+  function kindLabel(kind) {
+    return { latency: "延迟测试", speed: "速度测试", full: "综合测试" }[kind] || "测试";
+  }
+  function toast(msg, isErr) {
+    var el = $("toast");
+    el.textContent = msg;
+    el.className = "toast show" + (isErr ? " err" : "");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { el.className = "toast"; }, 4200);
+  }
+
+  // ---------- 界面状态 ----------
+  function setStatusText(text, mode) {
+    $("statusText").textContent = text;
+    $("dot").className = "dot" + (mode ? " " + mode : "");
+  }
+  function resetBar() { $("barFill").style.width = "0%"; $("barText").textContent = ""; }
+  function finishBar() { $("barFill").style.width = "100%"; }
+  function setTestButtonsDisabled(disabled) {
+    ["btnLatency", "btnSpeed", "btnFull"].forEach(function (id) { $(id).disabled = disabled; });
+  }
+  function setProgress(text) {
+    var t = (text || "").trim();
+    $("barText").textContent = t;
+    var m = t.match(/(\d+)\s*\/\s*(\d+)/);
+    if (m) {
+      var cur = parseInt(m[1], 10), total = parseInt(m[2], 10);
+      var pct = total > 0 ? Math.max(0, Math.min(100, cur / total * 100)) : 0;
+      $("barFill").style.width = pct.toFixed(1) + "%";
+    }
+  }
+  function appendLog(t, msg) {
+    var box = $("logs");
+    var line = document.createElement("div");
+    line.className = "log-line";
+    var ts = document.createElement("span");
+    ts.className = "ts";
+    ts.textContent = "[" + (t || now()) + "]";
+    var body = document.createElement("span");
+    body.textContent = " " + String(msg == null ? "" : msg).replace(/\r/g, " ");
+    if (/^✘/.test(msg)) body.className = "err";
+    else if (/^✔/.test(msg)) body.className = "ok";
+    else if (/^(▶|★)/.test(msg)) body.className = "hl";
+    line.appendChild(ts);
+    line.appendChild(body);
+    box.appendChild(line);
+    while (box.children.length > 600) box.removeChild(box.firstChild);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  // ---------- 状态同步 ----------
+  function applyStatus(st) {
+    if (!st) return;
+    state.running = !!st.running;
+    state.hasIP = !!st.hasIpFile;
+
+    $("ver").textContent = st.version ? "  v" + st.version : "";
+    var badge = $("adminBadge");
+    if (st.admin) {
+      badge.className = "badge ok";
+      badge.textContent = "管理员模式";
+      badge.title = "已具备写入 hosts 的权限";
+    } else {
+      badge.className = "badge warn";
+      badge.textContent = "普通权限 · 写 hosts 需管理员";
+      badge.title = "右键程序 → 以管理员身份运行，才能写入 hosts";
+    }
+
+    setTestButtonsDisabled(state.running || !state.hasIP);
+    if (st.running) {
+      setStatusText(kindLabel(st.kind) + "进行中…", "run");
+    } else {
+      setStatusText(state.hasIP ? "就绪" : "缺少 ip.txt", state.hasIP ? "" : "err");
+    }
+  }
+
+  function onStage(d) {
+    if (!d) return;
+    var isStart = d.status === "start";
+    if (d.stage === "latency") {
+      setStatusText(isStart ? "延迟测速中…" : "延迟测速完成", isStart ? "run" : "done");
+    } else if (d.stage === "download") {
+      setStatusText(isStart ? "下载测速中…" : "下载测速完成", isStart ? "run" : "done");
+    }
+    if (isStart) resetBar(); else finishBar();
+  }
+
+  // ---------- 结果渲染 ----------
+  function renderResult(d) {
+    if (!d) return;
+    var isFull = d.testType === "full";
+    $("resultCard").hidden = false;
+    $("thScore").hidden = !isFull;
+    $("resultMeta").textContent =
+      kindLabel(d.testType) + " · 可用 IP " + d.total + " 个 · 用时 " + (d.elapsedMs / 1000).toFixed(1) + " 秒";
+
+    var b = d.best || {};
+    var html = "";
+    html += '<div class="best-ip"><span class="label">最优 IP</span><b class="mono">' + esc(b.ip) + "</b></div>";
+    var stats = ["延迟 " + fmt(b.delay, 1) + " ms", "丢包 " + fmt((b.loss || 0) * 100, 0) + "%"];
+    if (b.speed > 0) stats.push("速度 " + fmt(b.speed, 2) + " MB/s");
+    if (b.colo) stats.push("地区 " + esc(b.colo));
+    html += '<div class="best-stats">' + stats.join(" · ") + "</div>";
+    if (d.hosts) {
+      if (d.hosts.written) {
+        html += '<div class="hosts-note ok">✔ 已写入 hosts：' + esc(b.ip) + " " + esc(d.hosts.domain) + "</div>";
+      } else if (d.hosts.error) {
+        html += '<div class="hosts-note err">✘ hosts 写入失败：' + esc(d.hosts.error) + "</div>";
+      }
+    }
+    $("bestBox").innerHTML = html;
+
+    var tbody = $("tbody");
+    tbody.innerHTML = "";
+    (d.rows || []).forEach(function (r, i) {
+      var tr = document.createElement("tr");
+      if (i === 0) tr.className = "top";
+      var cells = [
+        String(i + 1),
+        '<span class="mono">' + esc(r.ip) + "</span>",
+        fmt(r.delay, 1),
+        fmt((r.loss || 0) * 100, 0) + "%",
+        r.speed > 0 ? fmt(r.speed, 2) : "—",
+        r.colo ? esc(r.colo) : "N/A"
+      ];
+      if (isFull) cells.push(fmt(r.score, 3));
+      cells.forEach(function (c) {
+        var td = document.createElement("td");
+        td.innerHTML = c;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ---------- 动作 ----------
+  function postJSON(url, body) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json(); });
+  }
+
+  async function doTest(kind) {
+    if (state.running) return;
+    var domain = $("domain").value.trim();
+    var writeHosts = $("writeHosts").checked;
+    if (writeHosts && !domain) {
+      toast("勾选了「直接写入 hosts」，请先填写要加速的域名", true);
+      $("domain").focus();
+      return;
+    }
+    try {
+      localStorage.setItem("cfst.domain", domain);
+    } catch (e) {}
+    try {
+      var res = await postJSON("/api/test", { type: kind, domain: domain, writeHosts: writeHosts });
+      if (!res || !res.ok) toast((res && res.error) || "启动测试失败", true);
+    } catch (e) {
+      toast("启动测试失败：" + e, true);
+    }
+  }
+
+  async function doClearProxy() {
+    var btn = $("btnProxy");
+    btn.disabled = true;
+    try {
+      var res = await postJSON("/api/clear-proxy", {});
+      if (res && !res.ok && res.error) toast(res.error, true);
+      else toast("系统代理已清除");
+    } catch (e) {
+      toast("操作失败：" + e, true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function bindEvents() {
+    $("btnProxy").addEventListener("click", doClearProxy);
+    $("btnLatency").addEventListener("click", function () { doTest("latency"); });
+    $("btnSpeed").addEventListener("click", function () { doTest("speed"); });
+    $("btnFull").addEventListener("click", function () { doTest("full"); });
+    $("domain").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") doTest("full");
+    });
+  }
+
+  // ---------- 初始化 ----------
+  function init() {
+    bindEvents();
+
+    try {
+      var saved = localStorage.getItem("cfst.domain");
+      if (saved) $("domain").value = saved;
+    } catch (e) {}
+
+    // SSE 实时事件流（日志历史由服务端回放）
+    var es = new EventSource("/api/events");
+    es.addEventListener("log", function (e) {
+      var d = JSON.parse(e.data);
+      appendLog(d.time, d.msg);
+    });
+    es.addEventListener("progress", function (e) { setProgress(JSON.parse(e.data).text); });
+    es.addEventListener("stage", function (e) { onStage(JSON.parse(e.data)); });
+    es.addEventListener("status", function (e) { applyStatus(JSON.parse(e.data)); });
+    es.addEventListener("result", function (e) { renderResult(JSON.parse(e.data)); });
+    es.addEventListener("err", function (e) {
+      if (e.data) toast(JSON.parse(e.data).msg, true);
+    });
+    es.addEventListener("error", function () {
+      // EventSource 连接层错误（浏览器稍后自动重连）
+      setStatusText("连接已断开，正在重连…", "err");
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

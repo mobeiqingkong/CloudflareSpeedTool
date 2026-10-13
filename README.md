@@ -1,4 +1,6 @@
-# XIU2/CloudflareSpeedTest
+# CloudflareSpeedTool
+
+> 本仓库是 [XIU2/CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest) 的 fork，在原命令行版本的基础上**新增了图形界面（GUI）**：填写域名 → 一键测速 → 最优 IP 自动写入系统 hosts，无需命令行操作。
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/XIU2/CloudflareSpeedTest.svg?style=flat-square&label=Go&color=00ADD8&logo=go)](https://github.com/XIU2/CloudflareSpeedTest/)
 [![Release Version](https://img.shields.io/github/v/release/XIU2/CloudflareSpeedTest.svg?style=flat-square&label=Release&color=00ADD8&logo=github)](https://github.com/XIU2/CloudflareSpeedTest/releases/latest)
@@ -21,9 +23,67 @@
 > Cloudflare CDN 已**明文禁止代理**方式使用，对于**代理套 CDN** 的自行承担风险，请勿过度依赖 [#382](https://github.com/XIU2/CloudflareSpeedTest/discussions/382) [#383](https://github.com/XIU2/CloudflareSpeedTest/discussions/383)
 
 ****
-## \# 快速使用
+## \# 图形界面版
+
+> 填一个域名 → 点一个按钮 → 最优 IP 自动写入 hosts。双击即用，无需命令行操作。
+
+![图形界面](gui/screenshot.png)
+
+### 功能一览
+
+| 界面元素 | 说明 |
+| --- | --- |
+| **要加速的域名** | 填写目标域名（支持直接粘贴完整网址，自动提取域名），自动记忆上次输入 |
+| **☑ 直接写入 hosts** | 勾选后，测速完成时自动把最优 IP 写入系统 hosts —— 写入前**自动备份原文件**、把原有同域名记录**注释保留**、并刷新 DNS 缓存 |
+| **清除系统代理** | 一键清除系统代理设置（`ProxyEnable` / `ProxyServer` / PAC 自动配置脚本 + WinHTTP），避免代理影响测速准确性 |
+| **延迟测试** | 仅测 TCP 延迟，选出**延迟最低**的 IP（最快，约 1 分钟） |
+| **速度测试** | 延迟预筛 + 下载测速，选出**下载速度最快**的 IP（约 1~3 分钟） |
+| **综合测试** | 完整两阶段测速后，按 `0.7 × 速度得分 + 0.3 × 延迟得分` 综合评分，选出**最均衡**的 IP |
+
+测试过程中的**实时日志、进度条与结果**（最优 IP 卡片 + 完整结果表格）都会直接显示在界面上。
+
+### 使用方式
+
+1. 双击 `gui/build/bin/CloudflareSpeedTool-GUI.exe` 启动（建议右键 **以管理员身份运行**，否则无法写入 hosts）；
+2. 在界面中填写要加速的域名（如 `github.com`），按需勾选「直接写入 hosts」；
+3. 点击「延迟测试 / 速度测试 / 综合测试」中的任一按钮，等待测速完成；
+4. 勾选写入时，最优 IP 会自动写入 hosts 并立即生效（已自动刷新 DNS 缓存）。
+
+> - 界面窗口以 **Edge / Chrome 的 APP 模式**打开（无地址栏，观感与桌面应用一致），需要系统装有 Edge 或 Chrome（Windows 10/11 自带 Edge）。
+> - hosts 原文件会自动备份到程序目录的 `backup\hosts_时间戳.bak`；原有的同域名记录会被注释为 `# [CFST 已接管] ...`，可随时手动恢复。
+> - 重复双击程序**不会重复启动**：会自动调出已打开的界面窗口。
+> - 测速数据文件 `ip.txt` 需与程序放在一起（或放在程序上级目录），程序会自动查找。
+
+### 实现原理
+
+- 程序启动后在 **`127.0.0.1:7752`**（仅本机可访问）拉起本地服务，负责测速、读写 hosts、清除代理等全部系统操作；
+- 界面窗口通过 Edge/Chrome 的 `--app` 模式打开本地页面，前后端通过 SSE 实时推送日志与进度；
+- 未使用 WebView2 / Wails 等内嵌浏览器方案：当前 WebView2 Runtime 与 Go 绑定库存在已知兼容性问题（GPU 进程反复崩溃），本方案完全规避且无额外运行时依赖。
+
+### 构建（开发者）
+
+需要 **Go 1.21+**，构建单文件可执行程序：
+
+```bash
+cd gui
+go build -o build/bin/CloudflareSpeedTool-GUI.exe .
+```
+
+运行单元测试（域名校验、hosts 解析 / 写入逻辑）：
+
+```bash
+cd gui
+go test ./...
+```
+
+> `gui/` 是独立 Go 模块（`gui/go.mod`，通过 `replace` 引用上级目录的命令行代码），与命令行版本互不影响。
+
+****
+## \# 命令行模式
 
 ### 下载运行
+
+> 以下为**上游命令行版本**（CFST）的下载与使用说明；本仓库的**图形界面版**见上方 [「图形界面版」](#-图形界面版) 章节。
 
 1. 下载编译好的可执行文件（ [Github Releases](https://github.com/XIU2/CloudflareSpeedTest/releases) / [蓝奏云](https://xiu.lanzoub.com/b0742hkxe) ）并解压。  
 2. 双击运行 `cfst.exe` 文件（Windows 系统），等待测速完成...
@@ -826,6 +886,8 @@ cfst -f 1.txt
 
 ## 问题反馈
 
+> 本仓库（fork）**新增的图形界面**相关问题，请优先反馈到本仓库的 [Issues](https://github.com/mobeiqingkong/CloudflareSpeedTool/issues)；CFST 核心功能（测速、参数等）的问题请按下面渠道反馈给上游项目。
+
 如果你遇到什么问题，可以先去 [**Issues**](https://github.com/XIU2/CloudflareSpeedTest/issues)、[Discussions](https://github.com/XIU2/CloudflareSpeedTest/discussions) 里看看是否有别人问过了（记得去看下  [**Closed**](https://github.com/XIU2/CloudflareSpeedTest/issues?q=is%3Aissue+is%3Aclosed) 的）。  
 如果没找到类似问题，请新开个 [**Issues**](https://github.com/XIU2/CloudflareSpeedTest/issues/new) 来告诉我！
 
@@ -878,8 +940,21 @@ _**English language version of CFST (Text language differences only) [#64](https
 
 ## 手动编译
 
+### 图形界面版（GUI）
+
+```bash
+# 在仓库根目录执行：
+cd gui
+go build -o build/bin/CloudflareSpeedTool-GUI.exe .
+```
+
+编译产物为 `gui/build/bin/CloudflareSpeedTool-GUI.exe`（单文件），复制到任意目录（与 `ip.txt` 放在一起）即可双击使用。  
+运行单元测试：`cd gui && go test ./...`
+
+> GUI 版要求 **Go 1.21+**（依赖 `//go:build` 语法，过老的 Go 无法编译）；命令行版本的编译方式见下方。
+
 <details>
-<summary><code><strong>「 点击展开 查看内容 」</strong></code></summary>
+<summary><code><strong>「 点击展开 查看内容（命令行版本） 」</strong></code></summary>
 
 ****
 

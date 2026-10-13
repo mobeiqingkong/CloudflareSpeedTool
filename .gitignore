@@ -2,3 +2,7 @@ dist
 Releases
 *.exe
 *.csv
+
+# GUI 构建产物与 hosts 备份
+gui/build/
+backup/
