@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"time"
 )
 
@@ -20,8 +19,8 @@ func main() {
 	if url := probeExisting(); url != "" {
 		fmt.Println("检测到程序已在运行，正在打开界面：" + url)
 		if err := openAppWindow(url); err != nil {
-			fmt.Println("打开界面失败：" + err.Error())
-			fmt.Println("请手动在浏览器中访问：" + url)
+			showMessageBox("CloudflareSpeedTool",
+				"未能打开界面窗口：\n"+err.Error()+"\n\n请确认系统已安装 Edge 或 Chrome 浏览器后重试。")
 		}
 		return
 	}
@@ -34,17 +33,15 @@ func main() {
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
 	}
 	if err != nil {
-		fmt.Println("启动本地服务失败：", err)
-		pauseExit()
+		pauseExit("启动本地服务失败：" + err.Error())
 		return
 	}
 	url := fmt.Sprintf("http://%s/", ln.Addr().String())
 
-	// 控制台提示（在日志重定向之前输出，保证双击运行时能看到）
+	// 控制台提示（GUI 子系统下无控制台时输出会被忽略，仅调试构建可见）
 	fmt.Println("==========================================================")
 	fmt.Printf("  CloudflareSpeedTool 图形界面  v%s\n", version)
 	fmt.Printf("  界面地址：%s\n", url)
-	fmt.Println("  提示：保持本窗口打开；关闭本窗口将退出程序。")
 	fmt.Println("==========================================================")
 
 	// 初始化运行环境（把测速日志与进度接到界面）
@@ -53,14 +50,20 @@ func main() {
 	// 打开界面窗口
 	go func() {
 		if err := openAppWindow(url); err != nil {
-			app.emitError("打开界面窗口失败：" + err.Error() + "（请手动在浏览器访问 " + url + "）")
+			showMessageBox("CloudflareSpeedTool",
+				"未能打开界面窗口：\n"+err.Error()+"\n\n请确认系统已安装 Edge 或 Chrome 浏览器后重试。")
+			os.Exit(1)
 		}
 	}()
 
+	// 监视界面窗口：用户关闭全部界面窗口后自动退出程序，避免留下无界面的后台进程
+	go watchUIWindow(func() {
+		os.Exit(0)
+	})
+
 	srv := &http.Server{Handler: app.routes()}
 	if err := srv.Serve(ln); err != nil {
-		fmt.Println("服务异常退出：", err)
-		pauseExit()
+		pauseExit("服务异常退出：" + err.Error())
 	}
 }
 
@@ -131,10 +134,8 @@ func browserCandidates() []string {
 	return list
 }
 
-// pauseExit Windows 下双击运行时出错，等待用户看清信息
-func pauseExit() {
-	if runtime.GOOS == "windows" {
-		fmt.Println("按回车键退出...")
-		fmt.Scanln()
-	}
+// pauseExit 启动/运行失败时的提示（GUI 模式下通过弹窗提示用户，随后退出）
+func pauseExit(msg string) {
+	showMessageBox("CloudflareSpeedTool", msg)
+	os.Exit(1)
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -120,7 +119,7 @@ func WriteHosts(ip, domain, runDir string) *HostsInfo {
 	}
 
 	// 5. 刷新 DNS 缓存
-	if out, err := exec.Command("ipconfig", "/flushdns").CombinedOutput(); err != nil {
+	if out, err := hiddenCmd("ipconfig", "/flushdns").CombinedOutput(); err != nil {
 		msg := strings.TrimSpace(string(out))
 		if msg == "" {
 			msg = err.Error()

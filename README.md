@@ -36,19 +36,21 @@
 | **要加速的域名** | 填写目标域名（支持直接粘贴完整网址，自动提取域名），自动记忆上次输入 |
 | **☑ 直接写入 hosts** | 勾选后，测速完成时自动把最优 IP 写入系统 hosts —— 写入前**自动备份原文件**、把原有同域名记录**注释保留**、并刷新 DNS 缓存 |
 | **清除系统代理** | 一键清除系统代理设置（`ProxyEnable` / `ProxyServer` / PAC 自动配置脚本 + WinHTTP），避免代理影响测速准确性 |
-| **延迟测试** | 仅测 TCP 延迟，选出**延迟最低**的 IP（最快，约 1 分钟） |
-| **速度测试** | 延迟预筛 + 下载测速，选出**下载速度最快**的 IP（约 1~3 分钟） |
-| **综合测试** | 完整两阶段测速后，按 `0.7 × 速度得分 + 0.3 × 延迟得分` 综合评分，选出**最均衡**的 IP |
+| **开始运行** | 一键完整测速：先延迟测速预筛（约 1 分钟）→ 再下载测速，按 `0.7 × 速度得分 + 0.3 × 延迟得分` 综合评分选出**最优 IP**（全程约 2~3 分钟） |
 
 测试过程中的**实时日志、进度条与结果**（最优 IP 卡片 + 完整结果表格）都会直接显示在界面上。
+
+> [!NOTE]
+> 「开始运行」的完整流程中，下载测速**必须**先基于延迟测速的结果（按延迟从低到高依次对 IP 下载测速），因此日志中会先出现一个延迟测速阶段（约 1 分钟），这是正常流程、并非重复测试。
 
 ### 使用方式
 
 1. 双击 `gui/build/bin/CloudflareSpeedTool-GUI.exe` 启动（建议右键 **以管理员身份运行**，否则无法写入 hosts）；
 2. 在界面中填写要加速的域名（如 `github.com`），按需勾选「直接写入 hosts」；
-3. 点击「延迟测试 / 速度测试 / 综合测试」中的任一按钮，等待测速完成；
+3. 点击「开始运行」按钮，等待测速完成（约 2~3 分钟）；
 4. 勾选写入时，最优 IP 会自动写入 hosts 并立即生效（已自动刷新 DNS 缓存）。
 
+> - 程序以 **GUI 模式**运行，双击后**只有一个界面窗口**（无控制台窗口）；**关闭界面窗口后程序会自动退出**，不会残留后台进程。
 > - 界面窗口以 **Edge / Chrome 的 APP 模式**打开（无地址栏，观感与桌面应用一致），需要系统装有 Edge 或 Chrome（Windows 10/11 自带 Edge）。
 > - hosts 原文件会自动备份到程序目录的 `backup\hosts_时间戳.bak`；原有的同域名记录会被注释为 `# [CFST 已接管] ...`，可随时手动恢复。
 > - 重复双击程序**不会重复启动**：会自动调出已打开的界面窗口。
@@ -66,8 +68,10 @@
 
 ```bash
 cd gui
-go build -o build/bin/CloudflareSpeedTool-GUI.exe .
+go build -ldflags "-H=windowsgui" -o build/bin/CloudflareSpeedTool-GUI.exe .
 ```
+
+> `-H=windowsgui` 让程序以 GUI 子系统运行（双击时不弹出控制台窗口）；如需调试查看控制台输出，可去掉该参数构建。
 
 运行单元测试（域名校验、hosts 解析 / 写入逻辑）：
 
@@ -945,7 +949,7 @@ _**English language version of CFST (Text language differences only) [#64](https
 ```bash
 # 在仓库根目录执行：
 cd gui
-go build -o build/bin/CloudflareSpeedTool-GUI.exe .
+go build -ldflags "-H=windowsgui" -o build/bin/CloudflareSpeedTool-GUI.exe .
 ```
 
 编译产物为 `gui/build/bin/CloudflareSpeedTool-GUI.exe`（单文件），复制到任意目录（与 `ip.txt` 放在一起）即可双击使用。  

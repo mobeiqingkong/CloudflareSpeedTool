@@ -20,6 +20,11 @@ func NewBar(count int, MyStrStart, MyStrEnd string) *Bar {
 	bar := pb.ProgressBarTemplate(tmpl).New(count)
 	if ProgressOutput != nil {
 		bar.SetWriter(ProgressOutput)
+		// 固定进度条宽度（GUI 模式专用）：避免 pb 去探测终端宽度。
+		// pb 在探测失败或识别为 msys/mingw 环境（MSYSTEM/MINGW_PREFIX 环境变量）时，
+		// 会回退执行外部 `tput cols` 命令获取宽度（每次渲染一次）；
+		// 而无控制台的 GUI 程序启动控制台子进程会弹出新终端窗口，导致反复弹窗。
+		bar.SetWidth(100)
 	}
 	bar.Start()
 	return &Bar{pb: bar}

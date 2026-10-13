@@ -40,7 +40,7 @@ func testLabel(kind string) string {
 	case "speed":
 		return "速度测试"
 	case "full":
-		return "综合测试"
+		return "测速"
 	}
 	return kind
 }
@@ -63,7 +63,13 @@ func (a *App) runTest(req TestRequest) {
 	if req.WriteHosts && req.Domain != "" {
 		extra = fmt.Sprintf("，完成后写入 hosts：%s", req.Domain)
 	}
-	a.emitLog("▶ 开始" + testLabel(req.Type) + extra)
+	if req.Type == "latency" {
+		a.emitLog("▶ 开始延迟测试" + extra)
+	} else {
+		// 说明：下载测速必须基于延迟测速的结果（按延迟从低到高依次测），在此明确标注两阶段
+		a.emitLog(fmt.Sprintf("▶ 开始%s（阶段 1/2：延迟测速预筛 → 阶段 2/2：下载测速）%s",
+			testLabel(req.Type), extra))
+	}
 
 	// ---------- 阶段 1：延迟测速 ----------
 	a.emitStage("latency", "start", 0)
@@ -95,7 +101,7 @@ func (a *App) runTest(req TestRequest) {
 		rows := speedRows(speedSet, maxRows)
 		if req.Type == "full" {
 			rows = applyScoreAndSort(rows)
-			a.emitLog("综合测试：按 0.7×速度得分 + 0.3×延迟得分 排序，选出最均衡的 IP")
+			a.emitLog("综合评分：按 0.7×速度得分 + 0.3×延迟得分 排序，选出最均衡的 IP")
 		}
 		a.finishTest(req, rows, len(pingSet), startAt)
 	}

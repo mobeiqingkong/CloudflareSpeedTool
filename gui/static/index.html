@@ -118,8 +118,6 @@
     box-shadow: 0 4px 14px rgba(246,130,31,.35);
   }
   .btn.primary:hover:not(:disabled) { background: linear-gradient(135deg, #f78a24, #ee7610); border-color: transparent; }
-  .btn.test { border-color: rgba(47,107,255,.4); color: var(--blue); background: rgba(47,107,255,.05); }
-  .btn.test:hover:not(:disabled) { background: rgba(47,107,255,.1); border-color: rgba(47,107,255,.55); }
 
   /* ---------- 控制台 ---------- */
   .console { padding: 0; overflow: hidden; }
@@ -232,9 +230,7 @@
   <section class="actions">
     <button id="btnProxy" class="btn" title="清除系统代理（注册表 ProxyEnable / ProxyServer / PAC + WinHTTP），避免代理影响测速准确性">清除系统代理</button>
     <div class="grow"></div>
-    <button id="btnLatency" class="btn test" title="仅测 TCP 延迟，选出延迟最低的 IP，速度最快（约 10~40 秒）">延迟测试</button>
-    <button id="btnSpeed" class="btn test" title="延迟测速 + 下载测速，选出下载速度最快的 IP（约 1~3 分钟）">速度测试</button>
-    <button id="btnFull" class="btn primary" title="完整两阶段测速后按「低延迟 + 高速度」综合评分选出最均衡的 IP（约 1~3 分钟）">综合测试</button>
+    <button id="btnRun" class="btn primary" title="一键完整测速：延迟测速预筛 → 下载测速 → 综合评分选出最优 IP（约 2~3 分钟）；勾选后自动写入 hosts">开始运行</button>
   </section>
 
   <section class="card console">
@@ -295,7 +291,7 @@
     return isFinite(x) ? x.toFixed(n) : "—";
   }
   function kindLabel(kind) {
-    return { latency: "延迟测试", speed: "速度测试", full: "综合测试" }[kind] || "测试";
+    return { latency: "延迟测试", speed: "速度测试", full: "测速" }[kind] || "测速";
   }
   function toast(msg, isErr) {
     var el = $("toast");
@@ -312,8 +308,8 @@
   }
   function resetBar() { $("barFill").style.width = "0%"; $("barText").textContent = ""; }
   function finishBar() { $("barFill").style.width = "100%"; }
-  function setTestButtonsDisabled(disabled) {
-    ["btnLatency", "btnSpeed", "btnFull"].forEach(function (id) { $(id).disabled = disabled; });
+  function setRunButtonDisabled(disabled) {
+    $("btnRun").disabled = disabled;
   }
   function setProgress(text) {
     var t = (text || "").trim();
@@ -362,7 +358,7 @@
       badge.title = "右键程序 → 以管理员身份运行，才能写入 hosts";
     }
 
-    setTestButtonsDisabled(state.running || !state.hasIP);
+    setRunButtonDisabled(state.running || !state.hasIP);
     if (st.running) {
       setStatusText(kindLabel(st.kind) + "进行中…", "run");
     } else {
@@ -474,9 +470,7 @@
 
   function bindEvents() {
     $("btnProxy").addEventListener("click", doClearProxy);
-    $("btnLatency").addEventListener("click", function () { doTest("latency"); });
-    $("btnSpeed").addEventListener("click", function () { doTest("speed"); });
-    $("btnFull").addEventListener("click", function () { doTest("full"); });
+    $("btnRun").addEventListener("click", function () { doTest("full"); });
     $("domain").addEventListener("keydown", function (e) {
       if (e.key === "Enter") doTest("full");
     });
